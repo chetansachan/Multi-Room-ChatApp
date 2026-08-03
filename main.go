@@ -20,7 +20,7 @@ var upgrader = websocket.Upgrader{
 type Room struct {
 	roomname string
 	clients  map[string]*Client
-	mu sync.RWMutex
+	mu       sync.RWMutex
 }
 
 type RoomManager struct {
@@ -65,23 +65,34 @@ func (rm *RoomManager) GetorCreateRoom(roomname string) *Room {
 
 	//create empty room with this room name
 	room := &Room{
-		clients:  map[string]*Client{},
-		/* 
+		clients: map[string]*Client{},
+		/*
 
-		clients : {
-			"aafjdslkjasldk1324134134" : "x000fff",
-			"aafjdslkjasldk1324134134" : "x000fff",
-			"aafjdslkjasldk1324134134" : "x000fff",
-			"aafjdslkjasldk1324134134" : "x000fff",
-			"aafjdslkjasldk1324134134" : "x000fff",
-		}
-		
+			clients : {
+				"aafjdslkjasldk1324134134" : "x000fff",
+				"aafjdslkjasldk1324134134" : "x000fff",
+				"aafjdslkjasldk1324134134" : "x000fff",
+				"aafjdslkjasldk1324134134" : "x000fff",
+				"aafjdslkjasldk1324134134" : "x000fff",
+			}
+
 		*/
 		roomname: roomname,
 	}
 
 	rm.rooms[roomname] = room
 	return room
+}
+
+func (rm *RoomManager) JoinRoom(roomname string, client *Client) {
+	//get room from GetorCreateRoom with this roomname
+	room := rm.GetorCreateRoom(roomname)
+
+	rm.mu.Lock()
+	room.clients[client.id.String()] = client
+	rm.mu.RUnlock()
+
+	log.Print("Client Joined Room")
 }
 
 func NewHub() *Hub {
