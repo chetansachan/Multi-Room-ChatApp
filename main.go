@@ -5,41 +5,45 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"golang.org/x/text/message"
 )
 
 type Client struct {
-	id uuid.UUID
+	id   uuid.UUID
 	conn *websocket.Conn
 	send chan []byte
 }
 
 type Hub struct {
-	clients map[*Client] bool
-	register chan *Client
+	clients    map[*Client]bool
+	register   chan *Client
 	unregister chan *Client
-	broadcast chan []byte
+	broadcast  chan []byte
+}
+
+type Message struct {
+	sender *Client
+	content []byte
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		clients: make(map[*Client]bool),
-		register: make(chan *Client),
+		clients:    make(map[*Client]bool),
+		register:   make(chan *Client),
 		unregister: make(chan *Client),
-		broadcast: make(chan []byte),
+		broadcast:  make(chan []byte),
 	}
 }
 
-func(c *Client) readPump(h *Hub) {
-	defer func(){
+func (c *Client) readPump(h *Hub) {
+	defer func() {
 		h.unregister <- c
 		c.conn.Close()
 	}()
 
 	for {
-		_,message,err:= c.conn.ReadMessage()
+		_, message, err := c.conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure){
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Print("Unable to read message")
 			}
 			break
@@ -48,8 +52,8 @@ func(c *Client) readPump(h *Hub) {
 	}
 }
 
-func(c *Client) writePump() {
-	defer func(){
+func (c *Client) writePump() {
+	defer func() {
 		c.conn.Close()
 	}()
 
@@ -62,13 +66,13 @@ func(c *Client) writePump() {
 	}
 }
 
-func (h *Hub) Run(){
+func (h *Hub) Run() {
 	for {
-		select{
+		select {
 		case client := <-h.register:
 			h.clients[client] = true
 			log.Print("Client Connected")
-		
+
 		case client := <-h.unregister:
 			delete(h.clients, client)
 			close(client.send)
