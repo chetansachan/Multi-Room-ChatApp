@@ -101,6 +101,13 @@ func (h *Hub) Run() {
 	}
 }
 
+func serverWs(w http.ResponseWriter, r *http.Request){
+	conn, err := upgrader.Upgrade(w,r,nil)
+	if err != nil {
+		log.Print("Error Upgraging Connection")
+	}
+}
+
 func main() {
 
 }
