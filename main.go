@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -19,10 +20,15 @@ var upgrader = websocket.Upgrader{
 type Room struct {
 	roomname string
 	clients  map[string]*Client
+	mu sync.RWMutex
 }
 
 type RoomManager struct {
-	rooms map[string]*Room
+	rooms map[string]*Room // {
+	// "afdadsjf13241" : {roomname: "afdadsjf13241", clent : Client},
+	// "afdadsjf132414213" : {roomname: "afdadsjf132414213", clent : Client}
+	// }
+	mu sync.RWMutex
 }
 
 type Client struct {
@@ -41,6 +47,41 @@ type Hub struct {
 	register   chan *Client
 	unregister chan *Client
 	broadcast  chan *Message
+}
+
+func NewRoomManager() *RoomManager {
+	return &RoomManager{
+		rooms: make(map[string]*Room),
+	}
+}
+
+func (rm *RoomManager) GetorCreateRoom(roomname string) *Room {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	//check if the room exist return the room
+	if room, ok := rm.rooms[roomname]; ok {
+		return room
+	}
+
+	//create empty room with this room name
+	room := &Room{
+		clients:  map[string]*Client{},
+		/* 
+
+		clients : {
+			"aafjdslkjasldk1324134134" : "x000fff",
+			"aafjdslkjasldk1324134134" : "x000fff",
+			"aafjdslkjasldk1324134134" : "x000fff",
+			"aafjdslkjasldk1324134134" : "x000fff",
+			"aafjdslkjasldk1324134134" : "x000fff",
+		}
+		
+		*/
+		roomname: roomname,
+	}
+
+	rm.rooms[roomname] = room
+	return room
 }
 
 func NewHub() *Hub {
