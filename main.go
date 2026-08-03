@@ -38,6 +38,8 @@ type Client struct {
 }
 
 type Message struct {
+	Type string
+	Room string
 	sender  *Client
 	content []byte
 }
@@ -46,7 +48,6 @@ type Hub struct {
 	clients    map[*Client]bool
 	register   chan *Client
 	unregister chan *Client
-	broadcast  chan *Message
 }
 
 func NewRoomManager() *RoomManager {
@@ -164,7 +165,6 @@ func NewHub() *Hub {
 		clients:    make(map[*Client]bool),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
-		broadcast:  make(chan *Message),
 	}
 }
 
@@ -214,14 +214,6 @@ func (h *Hub) Run() {
 			delete(h.clients, client)
 			close(client.send)
 			log.Print("Client Disconnected")
-
-		case message := <-h.broadcast:
-			for client := range h.clients {
-				if client == message.sender {
-					continue
-				}
-				client.send <- message.content
-			}
 		}
 	}
 }
