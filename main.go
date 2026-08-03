@@ -16,6 +16,11 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+type Room struct{
+	RoomName string
+	clients map[string]*Client
+}
+
 type Client struct {
 	id   uuid.UUID
 	conn *websocket.Conn
