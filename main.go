@@ -13,16 +13,16 @@ type Client struct {
 	send chan []byte
 }
 
+type Message struct {
+	sender  *Client
+	content []byte
+}
+
 type Hub struct {
 	clients    map[*Client]bool
 	register   chan *Client
 	unregister chan *Client
-	broadcast  chan []byte
-}
-
-type Message struct {
-	sender *Client
-	content []byte
+	broadcast  chan *Message
 }
 
 func NewHub() *Hub {
@@ -30,7 +30,7 @@ func NewHub() *Hub {
 		clients:    make(map[*Client]bool),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
-		broadcast:  make(chan []byte),
+		broadcast:  make(chan *Message),
 	}
 }
 
@@ -48,7 +48,10 @@ func (c *Client) readPump(h *Hub) {
 			}
 			break
 		}
-		h.broadcast <- message
+		h.broadcast <- &Message{
+			sender:  c,
+			content: message,
+		}
 	}
 }
 
@@ -80,7 +83,10 @@ func (h *Hub) Run() {
 
 		case message := <-h.broadcast:
 			for client := range h.clients {
-				client.send <- message
+				if client == message.sender {
+					continue
+				}
+				client.send <- message.content
 			}
 		}
 	}
