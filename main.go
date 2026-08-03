@@ -1,8 +1,11 @@
 package main
 
 import (
+	"log"
+
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"golang.org/x/text/message"
 )
 
 type Client struct {
@@ -24,6 +27,24 @@ func NewHub() *Hub {
 		register: make(chan *Client),
 		unregister: make(chan *Client),
 		broadcast: make(chan []byte),
+	}
+}
+
+func(c *Client) readPump(h *Hub) {
+	defer func(){
+		h.unregister <- c
+		c.conn.Close()
+	}()
+
+	for {
+		_,message,err:= c.conn.ReadMessage()
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure){
+				log.Print("Unable to read message")
+			}
+			break
+		}
+		h.broadcast <- message
 	}
 }
 
