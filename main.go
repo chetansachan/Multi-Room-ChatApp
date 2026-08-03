@@ -16,12 +16,12 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-type Room struct{
+type Room struct {
 	roomname string
-	clients map[string]*Client
+	clients  map[string]*Client
 }
 
-type RoomManager struct{
+type RoomManager struct {
 	rooms map[string]*Room
 }
 
@@ -132,6 +132,10 @@ func main() {
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		serverWs(hub, w, r)
+	})
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "index.html")
 	})
 
 	log.Print("Server running on port 8080")

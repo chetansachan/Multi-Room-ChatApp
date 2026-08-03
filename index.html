@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head><title>Go WebSocket Rooms Demo</title></head>
+<body>
+  <div>
+    <input id="roomInput" placeholder="room name" value="general" />
+    <button id="joinBtn">Join</button>
+    <button id="leaveBtn">Leave</button>
+  </div>
+
+  <ul id="messages"></ul>
+
+  <form id="form">
+    <input id="input" autocomplete="off" placeholder="message" />
+    <button>Send</button>
+  </form>
+
+  <script>
+    const ws = new WebSocket("ws://" + location.host + "/ws");
+    const messages = document.getElementById("messages");
+    const roomInput = document.getElementById("roomInput");
+
+    function log(text) {
+      const li = document.createElement("li");
+      li.textContent = text;
+      messages.appendChild(li);
+    }
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      log(`[${msg.type}] room=${msg.room ?? ""} content=${msg.content ?? ""}`);
+    };
+
+    document.getElementById("joinBtn").addEventListener("click", () => {
+      ws.send(JSON.stringify({ type: "join", room: roomInput.value }));
+    });
+
+    document.getElementById("leaveBtn").addEventListener("click", () => {
+      ws.send(JSON.stringify({ type: "leave", room: roomInput.value }));
+    });
+
+    document.getElementById("form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const input = document.getElementById("input");
+      if (input.value) {
+        ws.send(JSON.stringify({
+          type: "message",
+          room: roomInput.value,
+          content: input.value,
+        }));
+        input.value = "";
+      }
+    });
+  </script>
+</body>
+</html>
