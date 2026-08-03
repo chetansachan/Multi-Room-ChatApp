@@ -17,8 +17,12 @@ var upgrader = websocket.Upgrader{
 }
 
 type Room struct{
-	RoomName string
+	roomname string
 	clients map[string]*Client
+}
+
+type RoomManager struct{
+	rooms map[string]*Room
 }
 
 type Client struct {
