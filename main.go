@@ -95,6 +95,46 @@ func (rm *RoomManager) JoinRoom(roomname string, client *Client) {
 	log.Print("Client Joined Room")
 }
 
+func (rm *RoomManager) LeaveRoom(roomname string, client *Client) {
+	rm.mu.Lock()
+	//check if their if room with this name if not return room not exist
+	room, exist := rm.rooms[roomname]
+	rm.mu.Unlock()
+
+	if !exist {
+		log.Print("Room not exist")
+		return
+	}
+
+	rm.mu.Lock()
+	//delete client from rooom client map by using client id
+	delete(room.clients, client.id.String())
+
+	//if their is no client in the room delete the room
+	clientcount := len(room.clients)
+	rm.mu.Unlock()
+
+	log.Print("Client leaved the room")
+
+	if clientcount == 0 {
+		rm.mu.Lock()
+		room.mu.Lock()
+
+		deleted := false
+		if current, ok := rm.rooms[roomname]; ok && current == room && len(room.clients) == 0 {
+			delete(rm.rooms, roomname)
+			deleted = true
+		}
+		rm.mu.Unlock()
+		room.mu.Unlock()
+
+		if deleted {
+			log.Print("Empty room is deleted")
+		}
+	}
+
+}
+
 func NewHub() *Hub {
 	return &Hub{
 		clients:    make(map[*Client]bool),
