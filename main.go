@@ -101,7 +101,7 @@ func (h *Hub) Run() {
 	}
 }
 
-func serverWs(w http.ResponseWriter, r *http.Request){
+func serverWs(hub *Hub, w http.ResponseWriter, r *http.Request){
 	conn, err := upgrader.Upgrade(w,r,nil)
 	if err != nil {
 		log.Print("Error Upgraging Connection")
@@ -109,5 +109,16 @@ func serverWs(w http.ResponseWriter, r *http.Request){
 }
 
 func main() {
+	hub := NewHub()
+	go hub.Run()
+
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		serverWs(hub,w,r)
+	})
+
+	log.Print("Server running on port 8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil{
+		log.Print("Error running server")
+	}
 
 }
