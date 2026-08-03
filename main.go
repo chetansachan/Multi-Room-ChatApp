@@ -48,6 +48,20 @@ func(c *Client) readPump(h *Hub) {
 	}
 }
 
+func(c *Client) writePump() {
+	defer func(){
+		c.conn.Close()
+	}()
+
+	for message := range c.send {
+		err := c.conn.WriteMessage(websocket.TextMessage, message)
+		if err != nil {
+			log.Print("Unable to write message")
+			return
+		}
+	}
+}
+
 func main() {
 
 }
