@@ -9,7 +9,7 @@ import (
 )
 
 var upgrader = websocket.Upgrader{
-	ReadBufferSize: 1024,
+	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
 		return true
@@ -101,11 +101,20 @@ func (h *Hub) Run() {
 	}
 }
 
-func serverWs(hub *Hub, w http.ResponseWriter, r *http.Request){
-	conn, err := upgrader.Upgrade(w,r,nil)
+func serverWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Print("Error Upgraging Connection")
 	}
+
+	client := &Client{
+		id:   uuid.New(),
+		conn: conn,
+		send: make(chan []byte, 256),
+	}
+	hub.register <- client
+	go client.readPump(hub)
+	go client.writePump()
 }
 
 func main() {
@@ -113,11 +122,11 @@ func main() {
 	go hub.Run()
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		serverWs(hub,w,r)
+		serverWs(hub, w, r)
 	})
 
 	log.Print("Server running on port 8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil{
+	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Print("Error running server")
 	}
 
