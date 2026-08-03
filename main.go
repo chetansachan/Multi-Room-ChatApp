@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"sync"
@@ -38,10 +39,9 @@ type Client struct {
 }
 
 type Message struct {
-	Type string
-	Room string
-	sender  *Client
-	content []byte
+	Type    string          `json:"type"`
+	Room    string          `json:"room,omitempty"`
+	Content json.RawMessage `json:"content,omitempty"`
 }
 
 type Hub struct {
@@ -89,31 +89,31 @@ func (rm *RoomManager) JoinRoom(roomname string, client *Client) {
 	//get room from GetorCreateRoom with this roomname
 	room := rm.GetorCreateRoom(roomname)
 
-	rm.mu.Lock()
+	room.mu.Lock()
 	room.clients[client.id.String()] = client
-	rm.mu.RUnlock()
+	room.mu.Unlock()
 
 	log.Print("Client Joined Room")
 }
 
 func (rm *RoomManager) LeaveRoom(roomname string, client *Client) {
-	rm.mu.Lock()
+	rm.mu.RLock()
 	//check if their if room with this name if not return room not exist
 	room, exist := rm.rooms[roomname]
-	rm.mu.Unlock()
+	rm.mu.RUnlock()
 
 	if !exist {
 		log.Print("Room not exist")
 		return
 	}
 
-	rm.mu.Lock()
+	room.mu.Lock()
 	//delete client from rooom client map by using client id
 	delete(room.clients, client.id.String())
 
 	//if their is no client in the room delete the room
 	clientcount := len(room.clients)
-	rm.mu.Unlock()
+	room.mu.Unlock()
 
 	log.Print("Client leaved the room")
 
@@ -126,8 +126,8 @@ func (rm *RoomManager) LeaveRoom(roomname string, client *Client) {
 			delete(rm.rooms, roomname)
 			deleted = true
 		}
-		rm.mu.Unlock()
 		room.mu.Unlock()
+		rm.mu.Unlock()
 
 		if deleted {
 			log.Print("Empty room is deleted")
@@ -136,28 +136,82 @@ func (rm *RoomManager) LeaveRoom(roomname string, client *Client) {
 
 }
 
-func (rm *RoomManager) Broadcast(roomname string, message *Message) {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
+func (rm *RoomManager) IsMember(roomname, clientID string) bool {
+	rm.mu.RLock()
+	room, exist := rm.rooms[roomname]
+	rm.mu.RUnlock()
+	if !exist {
+		return false
+	}
+ 
+	room.mu.RLock()
+	defer room.mu.RUnlock()
+	_, ok := room.clients[clientID]
+	return ok
+}
 
+func (rm *RoomManager) Broadcast(roomname string, message []byte, senderId string) {
+	rm.mu.RLock()
 	//check if their is room with this name if not return room not exist
-	room, exist := rm.rooms[roomname]	
-	if !exist{
+	room, exist := rm.rooms[roomname]
+	rm.mu.RUnlock()
+
+	if !exist {
 		log.Print("Room not exist")
 		return
 	}
 
+	room.mu.RLock()
+	defer room.mu.RUnlock()
 	for id, client := range room.clients {
-		if id == message.sender.id.String() {
+		if id == senderId {
 			continue
 		}
 		select {
-		case client.send <- message.content:
+		case client.send <- message:
 		default:
-			log.Printf("Room broadcast: client %s buffer full", message.sender.id)
+			log.Printf("Room broadcast: client %s buffer full", id)
 		}
 	}
-	
+
+}
+
+func HandleMessage(client *Client, rm *RoomManager, data []byte) {
+	var msg Message
+	if err := json.Unmarshal(data, &msg); err != nil {
+		log.Printf("Invalid message from %s: %v", client.id, err)
+		return
+	}
+	switch msg.Type {
+	case "join":
+		rm.JoinRoom(msg.Room, client)
+		res := Message{Type: "joined", Room: msg.Room}
+		if output, err := json.Marshal(res); err == nil {
+			client.send <- output
+		}
+
+	case "leave":
+		rm.LeaveRoom(msg.Room, client)
+		res := Message{Type: "left", Room: msg.Room}
+		if output, err := json.Marshal(res); err == nil {
+			client.send <- output
+		}
+
+	case "message":
+		if !rm.IsMember(msg.Room, client.id.String()) {
+			log.Printf("Client %s tried to send to room %s without being a member", client.id, msg.Room)
+			res := Message{
+				Type:    "error",
+				Room:    msg.Room,
+				Content: json.RawMessage(`"you are not a member of this room"`),
+			}
+			if output, err := json.Marshal(res); err == nil {
+				client.send <- output
+			}
+			return
+		}
+		rm.Broadcast(msg.Room, data, client.id.String())
+	}
 }
 
 func NewHub() *Hub {
@@ -168,7 +222,7 @@ func NewHub() *Hub {
 	}
 }
 
-func (c *Client) readPump(h *Hub) {
+func (c *Client) readPump(h *Hub, rm *RoomManager) {
 	defer func() {
 		h.unregister <- c
 		c.conn.Close()
@@ -182,10 +236,7 @@ func (c *Client) readPump(h *Hub) {
 			}
 			break
 		}
-		h.broadcast <- &Message{
-			sender:  c,
-			content: message,
-		}
+		HandleMessage(c, rm, message)
 	}
 }
 
@@ -218,7 +269,7 @@ func (h *Hub) Run() {
 	}
 }
 
-func serverWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
+func serverWs(hub *Hub, rm *RoomManager, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Print("Error Upgraging Connection")
@@ -230,16 +281,17 @@ func serverWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		send: make(chan []byte, 256),
 	}
 	hub.register <- client
-	go client.readPump(hub)
+	go client.readPump(hub, rm)
 	go client.writePump()
 }
 
 func main() {
 	hub := NewHub()
+	rm := NewRoomManager()
 	go hub.Run()
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		serverWs(hub, w, r)
+		serverWs(hub, rm, w, r)
 	})
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
