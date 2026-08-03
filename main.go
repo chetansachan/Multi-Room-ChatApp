@@ -62,6 +62,26 @@ func(c *Client) writePump() {
 	}
 }
 
+func (h *Hub) Run(){
+	for {
+		select{
+		case client := <-h.register:
+			h.clients[client] = true
+			log.Print("Client Connected")
+		
+		case client := <-h.unregister:
+			delete(h.clients, client)
+			close(client.send)
+			log.Print("Client Disconnected")
+
+		case message := <-h.broadcast:
+			for client := range h.clients {
+				client.send <- message
+			}
+		}
+	}
+}
+
 func main() {
 
 }
