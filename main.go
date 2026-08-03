@@ -135,6 +135,30 @@ func (rm *RoomManager) LeaveRoom(roomname string, client *Client) {
 
 }
 
+func (rm *RoomManager) Broadcast(roomname string, message *Message) {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	//check if their is room with this name if not return room not exist
+	room, exist := rm.rooms[roomname]	
+	if !exist{
+		log.Print("Room not exist")
+		return
+	}
+
+	for id, client := range room.clients {
+		if id == message.sender.id.String() {
+			continue
+		}
+		select {
+		case client.send <- message.content:
+		default:
+			log.Printf("Room broadcast: client %s buffer full", message.sender.id)
+		}
+	}
+	
+}
+
 func NewHub() *Hub {
 	return &Hub{
 		clients:    make(map[*Client]bool),
